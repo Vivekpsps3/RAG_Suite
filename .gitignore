@@ -1,0 +1,12 @@
+# Virtual Environment
+.venv/
+
+# Data files
+*.pdf
+*.csv
+
+# Python cache files
+__pycache__/
+
+# ChromaDB files
+chroma_db/
