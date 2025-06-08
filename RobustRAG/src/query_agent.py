@@ -16,7 +16,7 @@ class QueryAgent:
     def __init__(
         self, 
         header_db: Dict[str, List[str]],
-        model_name: str = "/home/vivek/Programming/FUN_PROJ/AI/Model_Library/Dolphin3.0-Llama3.2-1B"
+        model_name: str = "/home/vivek/Files/Model_Files/Dolphin3.0-Llama3.1-8B"
     ):
         """Initialize the query agent."""
         self.header_db = header_db

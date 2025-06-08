@@ -9,6 +9,9 @@ import logging
 from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+# Import configuration
+from .config import EMBEDDING_MODEL_PATH
+
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -18,15 +21,20 @@ class CSVProcessor:
     def __init__(
         self, 
         textifier_delimiter: str = " | ",
-        chunk_size: int = 1024,
-        embedding_model_name: str = "all-MiniLM-L6-v2"
+        chunk_size: int = 512,
+        embedding_model_name: str = None
     ):
         """Initialize the CSV processor."""
         self.textifier_delimiter = textifier_delimiter
         self.chunk_size = chunk_size
         
+        # Use config path if no model name is provided
+        if embedding_model_name is None:
+            embedding_model_name = EMBEDDING_MODEL_PATH
+        
         # Initialize embedding model
         try:
+            logger.info(f"Loading embedding model from {embedding_model_name}")
             self.embedding_model = SentenceTransformer(embedding_model_name)
         except Exception as e:
             logger.error(f"Error loading embedding model: {str(e)}")
@@ -65,14 +73,18 @@ class CSVProcessor:
                     # Generate embedding
                     embedding = self._generate_embedding(chunk)
                     
-                    # Create document
-                    document = {
-                        "id": doc_id,
-                        "text": chunk,
-                        "metadata": metadata,
-                        "embedding": embedding
-                    }
-                    documents.append(document)
+                    # Only add document if embedding generation was successful
+                    if embedding is not None:
+                        # Create document
+                        document = {
+                            "id": doc_id,
+                            "text": chunk,
+                            "metadata": metadata,
+                            "embedding": embedding
+                        }
+                        documents.append(document)
+                    else:
+                        logger.warning(f"Skipping document {doc_id} due to embedding generation failure")
             
         except Exception as e:
             logger.error(f"Error processing CSV {file_path}: {str(e)}")
@@ -92,9 +104,25 @@ class CSVProcessor:
     def _generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for a text chunk."""
         try:
+            # Ensure text is not empty
+            if not text or len(text.strip()) == 0:
+                logger.warning("Received empty text for embedding generation")
+                return None
+                
+            # Generate embedding
+            logger.debug(f"Generating embedding for text: {text[:50]}...")
             embedding = self.embedding_model.encode(text)
-            return embedding.tolist()
+            
+            # Convert to Python list and verify dimensions
+            embedding_list = embedding.tolist()
+            if len(embedding_list) == 0:
+                logger.error("Generated embedding has zero dimensions")
+                return None
+                
+            logger.debug(f"Generated embedding with {len(embedding_list)} dimensions")
+            return embedding_list
             
         except Exception as e:
             logger.error(f"Error generating embedding: {str(e)}")
-            return [0.0] * 384  # Default dimension for all-MiniLM-L6-v2
+            logger.exception("Embedding generation failed")
+            return None  # Return None instead of fake embeddings to surface the error

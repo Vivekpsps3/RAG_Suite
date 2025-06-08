@@ -1,12 +1,17 @@
 # Virtual Environment
 .venv/
 
+# Environment variables
+.env
+
 # Data files
 *.pdf
 *.csv
+*.json
 
 # Python cache files
 __pycache__/
 
 # ChromaDB files
 chroma_db/
+vectors/

@@ -13,6 +13,7 @@ from .header_repository import HeaderRepository
 from .vector_store_manager import VectorStoreManager
 from .query_agent import QueryAgent
 from .csv_processor import CSVProcessor
+from .config import LLM_MODEL_PATH, CSV_DOCUMENTS_DIR
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -27,13 +28,21 @@ class ApplicationEngine:
     
     def __init__(
         self,
-        model_path: str = "/home/vivek/Programming/FUN_PROJ/AI/Model_Library/Dolphin3.0-Llama3.2-1B",
+        model_path: str = None,
         load_new_collection: bool = False
     ):
         """
         Initialize the application engine and process all CSVs.
+        
+        Args:
+            model_path: Path to the LLM model
+            load_new_collection: If True, clears existing vectors before processing CSVs
         """
         try:
+            # Use config value if not provided
+            if model_path is None:
+                model_path = LLM_MODEL_PATH
+                
             # Initialize components
             self.header_repo = HeaderRepository()
             self.vector_store = VectorStoreManager()
@@ -48,13 +57,13 @@ class ApplicationEngine:
                 torch_dtype=torch.float16
             )
             
+            # Optionally clear the collection before processing
             if load_new_collection:
-                # Process all CSVs in the documents/csv folder
-                self._process_all_csvs()
-                logger.info("Loading new collection, clearing existing vector store")
+                logger.info("Clearing existing vector store collection")
                 self.vector_store.clear_collection()
-            else:
-                logger.info("Loading existing vector store collection")
+                
+            # Process all CSVs
+            self._process_all_csvs()
             
             # Load header database after processing CSVs
             header_db = self.header_repo.load_headers()
@@ -70,7 +79,7 @@ class ApplicationEngine:
         """
         Process all CSV files in the documents/csv directory.
         """
-        csv_dir = Path("documents/csv")
+        csv_dir = CSV_DOCUMENTS_DIR
         if not csv_dir.exists():
             logger.info(f"Creating CSV directory: {csv_dir}")
             csv_dir.mkdir(parents=True, exist_ok=True)
@@ -79,7 +88,10 @@ class ApplicationEngine:
         processor = CSVProcessor()
         
         # Process each CSV file
-        for csv_file in csv_dir.glob("*.csv"):
+        csv_files = list(csv_dir.glob("*.csv"))
+        logger.info(f"Found {len(csv_files)} CSV files to process")
+        
+        for csv_file in csv_files:
             try:
                 logger.info(f"Processing CSV: {csv_file}")
                 
@@ -89,13 +101,31 @@ class ApplicationEngine:
                 # Process CSV
                 documents = processor.process_csv(csv_file)
                 
-                # Add to vector store
-                self.vector_store.add_documents(documents)
+                # Log the number of documents and check for embeddings
+                if documents:
+                    logger.info(f"Generated {len(documents)} documents with embeddings")
+                    # Verify first document has proper embedding
+                    if documents[0].get('embedding') is None:
+                        logger.error("ERROR: Documents do not have embeddings!")
+                    elif len(documents[0]['embedding']) == 0:
+                        logger.error("ERROR: Embedding vector is empty!")
+                    else:
+                        logger.info(f"Embedding dimension: {len(documents[0]['embedding'])}")
+                    
+                    # Add to vector store in batches
+                    self.vector_store.add_documents(documents, batch_size=500)
+                    
+                    # Verify the documents were added by checking collection count
+                    collection_info = self.vector_store.get_collection_info()
+                    logger.info(f"Collection now has {collection_info['count']} total documents")
+                else:
+                    logger.warning(f"No documents generated from {csv_file}")
                 
                 logger.info(f"Successfully processed CSV: {csv_file}")
                 
             except Exception as e:
                 logger.error(f"Error processing CSV {csv_file}: {str(e)}")
+                logger.exception("CSV processing failed")
     
     def execute_query(self, user_query: str) -> str:
         """
@@ -143,6 +173,9 @@ class ApplicationEngine:
             ANSWER:
             """
             
+            print(f"Final prompt for LLM:\n{final_prompt}\n")
+
+
             # 6. Generate answer with LLM
             inputs = self.tokenizer(final_prompt, return_tensors="pt").to(self.llm.device)
             with torch.no_grad():
