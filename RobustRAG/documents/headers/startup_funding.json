@@ -1,0 +1,15 @@
+{
+  "headers": [
+    "Sr No",
+    "Date dd/mm/yyyy",
+    "Startup Name",
+    "Industry Vertical",
+    "SubVertical",
+    "City  Location",
+    "Investors Name",
+    "InvestmentnType",
+    "Amount in USD",
+    "Remarks"
+  ],
+  "source": "startup_funding.csv"
+}
