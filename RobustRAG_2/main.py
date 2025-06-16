@@ -10,14 +10,8 @@ import logging
 import argparse
 import json
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Import RobustRAG components
+# Import RobustRAG components - logging is already configured in __init__
+from src import logger
 from src.application_engine import ApplicationEngine
 
 def interactive_query_mode(engine: ApplicationEngine) -> None:
@@ -54,6 +48,7 @@ def check_vector_store(engine: ApplicationEngine) -> None:
     info = engine.vector_store.get_collection_info()
     print(f"Collection name: {info['name']}")
     print(f"Document count: {info['count']}")
+    print(f"Chunk size: {engine.csv_processor.chunk_size}")
     
     if info['sample'] and info['count'] > 0:
         print("\nSample documents:")
@@ -73,9 +68,9 @@ def main() -> None:
     try:
         # Parse command-line arguments
         parser = argparse.ArgumentParser(description="RobustRAG system")
-        parser.add_argument("--debug", action="store_true", help="Print debug information")
         parser.add_argument("--new", action="store_true", help="Create a new collection (clears existing data)")
         parser.add_argument("--reload", action="store_true", help="Force reload all CSV files into vector store")
+        parser.add_argument("--check", action="store_true", help="Check vector store status")
         args = parser.parse_args()
         
         # Initialize the application engine (will auto-process CSVs)
@@ -84,10 +79,11 @@ def main() -> None:
         engine = ApplicationEngine(load_new_collection=load_new)
         logger.info("ApplicationEngine initialized successfully")
         
-        # Print debug information if requested
-        if args.debug:
+        # Check vector store status if requested
+        if args.check:
             check_vector_store(engine)
-        
+            return
+                
         # Run in interactive mode
         interactive_query_mode(engine)
             
