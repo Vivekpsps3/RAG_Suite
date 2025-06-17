@@ -25,14 +25,17 @@ LLM_MAX_TOKENS = 32000
 LLM_TEMPERATURE = 1.0
 MAX_NEW_TOKENS = 500
 
-# Default number of top results to return
-NUM_CTX_RESULTS = 10
+# Default number of top results to return from vector database
+NUM_CTX_RESULTS = 15
 
 # Vector store configuration
 VECTOR_STORE_DIR = os.getenv("VECTOR_STORE_DIR", "vectors")
 
 # Embedding model configuration
 EMBEDDING_MODEL_PATH = os.getenv("EMBEDDING_MODEL_PATH", "/home/vivek/Files/Model_Files/all-MiniLM-L6-v2")
+
+# Reranker model configuration
+RERANKER_MODEL_PATH = os.getenv("RERANKER_MODEL_PATH", "/home/vivek/Files/Model_Files/ms-marco-MiniLM-L-6-v2")
 
 # LLM model configuration
 LLM_MODEL_PATH = os.getenv("LLM_MODEL_PATH", "/home/vivek/Files/Model_Files/Dolphin3.0-Llama3.1-8B")
@@ -61,15 +64,19 @@ Answer:
 
 # Additional Context Prompt
 ADDITIONAL_CONTEXT_PROMPT = """
-Given the following context: {context}\n
-And the question: {query}\n
-Please generate a new query that is more specific and focused that will enable you to find the answer in the context.
-You must completely reformulate the question to ensure it can extract NEW information from the context.
-The given context may contain relevant information that can help refine the question.
-USE KEYWORDS EXACTLY AS THEY APPEAR IN THE CONTEXT. For example if I say "Alloy of Metals" and the context uses "Metallic Alloy", use the "Metallic Alloy".
-Just print the new query to get more specific information, almost like a google search.
-If the context has waste information, your new query should be able to filter out that waste information and focus on the relevant part.
-DO NOT ANSWER THE ORIGINAL QUESTION, JUST PRINT THE NEW QUERY.
+Given the following context: {context}
+And the question: {query}
+
+Please generate a new query that is more specific and focused to help find the answer in the context.
+Completely reformulate the question to extract NEW information from the context.
+
+Guidelines:
+- Use keywords EXACTLY as they appear in the context
+- Use synonyms and terminology as they appear in the context (e.g., if the context uses "Metallic Alloy" instead of "Alloy of Metals", use "Metallic Alloy")
+- Focus on relevant parts and filter out irrelevant information
+- Make your query precise and targeted like an effective search query
+
+DO NOT ANSWER THE ORIGINAL QUESTION - ONLY PROVIDE THE NEW QUERY.
 
 New Query:
 """

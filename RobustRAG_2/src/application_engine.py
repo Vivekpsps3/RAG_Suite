@@ -6,6 +6,7 @@ Automatically processes CSVs from documents/csv folder and provides query functi
 from pathlib import Path
 import logging
 import os
+from typing import Dict, Any, List
 
 # Import constants and configs
 from . import (
@@ -51,6 +52,9 @@ class ApplicationEngine:
             # Initialize the model engine (which lazily loads models)
             # This ensures the model_path is set if provided
             model_engine.get_llm(model_path)
+            
+            # Storage for last query information (for debugging)
+            self._last_query_info = None
             
             # Optionally clear the collection before processing
             if load_new_collection:
@@ -115,38 +119,100 @@ class ApplicationEngine:
                 logger.error(f"Error processing CSV {csv_file}: {str(e)}")
                 logger.exception("CSV processing failed")
     
-    def execute_query(self, user_query: str) -> str:
+    def execute_query(self, user_query: str, use_reranker: bool = True) -> str:
         """
         Execute a user query with the RAG system.
         
         Args:
             user_query: User's question
+            use_reranker: Whether to use reranking (if False, falls back to basic retrieval)
             
         Returns:
             Generated answer
         """
         try:
             # Retrieve relevant documents
-            results = self.vector_store.retrieve(
+            initial_results = self.vector_store.retrieve(
                 query=user_query,
                 n=NUM_CTX_RESULTS  # Get context docs
             )
             
-            # Format context
-            context_str = "\n\n".join([r["document"] for r in results])
+            # Format initial context for additional query generation
+            initial_context_str = "\n\n".join([r["document"] for r in initial_results])
 
             # Additional Context Retrieval
-            add_context_prompt = ADDITIONAL_CONTEXT_PROMPT.format(context=context_str, query=user_query)
+            add_context_prompt = ADDITIONAL_CONTEXT_PROMPT.format(context=initial_context_str, query=user_query)
             additional_context_query = model_engine.generate_llm_response(add_context_prompt)
-            logger.info(f"Additional context for query: {additional_context_query}")
+            logger.info(f"Additional context query: {additional_context_query}")
 
             additional_results = self.vector_store.retrieve(
                 query=additional_context_query,
                 n=NUM_CTX_RESULTS  # Get additional context docs
             )
-            additional_context_str = "\n\n".join([r["document"] for r in additional_results])
-            context_str += "\n\n" + additional_context_str
-            logger.info(f"Retrieved context for query: {user_query}")
+            
+            # Combine initial and additional results
+            combined_results = initial_results + additional_results
+            logger.info(f"Combined {len(initial_results)} initial and {len(additional_results)} additional results")
+            
+            # Process results based on whether reranking is enabled
+            if use_reranker:
+                # Rerank and deduplicate results
+                logger.info("Applying reranker and deduplication")
+                reranked_results = model_engine.rerank_results(
+                    query=user_query,
+                    results=combined_results,
+                    merge_duplicates=True
+                )
+                
+                # Take only the top 10 after reranking
+                top_results = reranked_results[:10]
+            else:
+                # Basic deduplication without reranking - use set to track unique documents
+                logger.info("Skipping reranker, using basic deduplication")
+                seen_content = set()
+                unique_results = []
+                
+                # Simple deduplication based on content
+                for result in combined_results:
+                    doc = result["document"]
+                    if len(doc) >= 200:
+                        signature = doc[:100] + doc[-100:]
+                    else:
+                        signature = doc
+                    
+                    if signature not in seen_content:
+                        seen_content.add(signature)
+                        unique_results.append(result)
+                
+                # Sort by original similarity score and take top 10
+                sorted_results = sorted(unique_results, 
+                                      key=lambda x: x.get("score", 0.0), 
+                                      reverse=True)
+                top_results = sorted_results[:10]
+                reranked_results = sorted_results  # For consistent logging
+            
+            # Detailed logging of reranked results
+            if len(reranked_results) > 0:
+                logger.info(f"Top reranked result score: {reranked_results[0]['score']:.4f}")
+                if len(reranked_results) > 10:
+                    logger.info(f"10th result score: {reranked_results[9]['score']:.4f}")
+                    logger.info(f"Last result score: {reranked_results[-1]['score']:.4f}")
+            
+            # Store the reranking info for potential debugging
+            self._last_query_info = {
+                'query': user_query,
+                'initial_results_count': len(initial_results),
+                'additional_results_count': len(additional_results),
+                'reranked_results_count': len(reranked_results),
+                'top_results_count': len(top_results),
+                'top_results': [{'score': r['score'], 'metadata': r.get('metadata', {})} for r in top_results]
+            }
+            
+            logger.info(f"Selected top {len(top_results)} results after reranking and deduplication")
+            
+            # Format final context from reranked results
+            context_str = "\n\n".join([r["document"] for r in top_results])
+            logger.info(f"Retrieved and reranked context for query: {user_query}")
             
             # Create final prompt
             final_prompt = QUERY_PROMPT.format(
@@ -162,11 +228,20 @@ class ApplicationEngine:
             # Generate answer with LLM
             answer = model_engine.generate_llm_response(final_prompt)
 
-            # Extract just the answer part (after the prompt)
-
             logger.info(f"Generated answer for query: {user_query}")
             return answer
             
         except Exception as e:
             logger.error(f"Error executing query: {str(e)}")
             return f"Error generating answer: {str(e)}"
+    
+    def get_last_query_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about the last executed query, including reranking details.
+        
+        Returns:
+            Dictionary with statistics about the last query
+        """
+        if self._last_query_info is None:
+            return {"error": "No query has been executed yet"}
+        return self._last_query_info

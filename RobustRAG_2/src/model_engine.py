@@ -5,12 +5,12 @@ This ensures models are only loaded once and shared across components.
 """
 import logging
 import torch
-from typing import Dict, Any, List, Union, Optional
+from typing import Dict, Any, List, Union, Optional, Tuple
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 import numpy as np
 
-from . import LLM_MODEL_PATH, EMBEDDING_MODEL_PATH, MAX_NEW_TOKENS, LLM_TEMPERATURE
+from . import LLM_MODEL_PATH, EMBEDDING_MODEL_PATH, RERANKER_MODEL_PATH, MAX_NEW_TOKENS, LLM_TEMPERATURE
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class ModelEngine:
         return cls._instance
     
     def __init__(self):
-        """Initialize the model engine if n ot already initialized."""
+        """Initialize the model engine if not already initialized."""
         if self._initialized:
             return
             
@@ -38,6 +38,7 @@ class ModelEngine:
             self._llm = None
             self._tokenizer = None
             self._embedding_model = None
+            self._reranker_model = None
             
             # Flag as initialized
             self._initialized = True
@@ -97,6 +98,30 @@ class ModelEngine:
                 raise
                 
         return self._embedding_model
+        
+    def get_reranker_model(self, model_path: str = None) -> CrossEncoder:
+        """Get the cross-encoder reranker model, loading if necessary."""
+        if self._reranker_model is None:
+            try:
+                # Use config value if not provided
+                if model_path is None:
+                    model_path = RERANKER_MODEL_PATH
+                
+                # Initialize reranker model
+                logger.info(f"Loading reranker model from {model_path}")
+
+                # Load the model
+                self._reranker_model = CrossEncoder(model_path)
+                # Move to GPU if available
+                if torch.cuda.is_available():
+                    self._reranker_model.to(torch.device('cuda'))
+
+                logger.info("Reranker model loaded successfully")
+            except Exception as e:
+                logger.error(f"Error loading reranker model: {str(e)}")
+                raise
+                
+        return self._reranker_model
 
     def generate_embeddings(self, texts: Union[str, List[str]]) -> Union[List[float], List[List[float]]]:
         """
@@ -194,6 +219,84 @@ class ModelEngine:
             logger.error(f"Error generating LLM response: {str(e)}")
             logger.exception("LLM response generation failed")
             return f"Error generating response: {str(e)}"
+    
+    def rerank_results(
+        self, 
+        query: str, 
+        results: List[Dict[str, Any]], 
+        merge_duplicates: bool = True
+    ) -> List[Dict[str, Any]]:
+        """
+        Rerank the retrieved documents using a cross-encoder model and remove duplicates.
+        
+        Args:
+            query: The user query
+            results: List of result dictionaries with 'document' field
+            merge_duplicates: Whether to merge near-duplicate documents
+            
+        Returns:
+            A reranked and deduplicated list of result dictionaries
+        """
+        try:
+            # Skip if no results
+            if not results:
+                logger.warning("No results to rerank")
+                return []
+                
+            # Get the reranker model
+            reranker = self.get_reranker_model()
+            documents = [r["document"] for r in results]
+            
+            # Create query-document pairs for reranking
+            pairs = [[query, doc] for doc in documents]
+            logger.info(f"Reranking {len(pairs)} documents")
+            
+            # Get scores from reranker
+            scores = reranker.predict(pairs)
+            
+            # Create a new list with scores
+            scored_results = []
+            for i, (score, result) in enumerate(zip(scores, results)):
+                # Make a copy of the original result
+                new_result = result.copy()
+                # Add or replace score with reranker score
+                new_result["score"] = float(score)
+                # Add original position for tie-breaking
+                new_result["original_position"] = i
+                scored_results.append(new_result)
+            
+            # Sort by score
+            reranked_results = sorted(scored_results, key=lambda x: x["score"], reverse=True)
+            
+            # Remove duplicates if requested
+            if merge_duplicates:
+                logger.info("Removing duplicate documents")
+                unique_results = []
+                seen_content = set()
+                
+                for result in reranked_results:
+                    # Create a signature of the document content
+                    # Use a simple approach: first 100 chars + last 100 chars
+                    doc = result["document"]
+                    if len(doc) >= 200:
+                        signature = doc[:100] + doc[-100:]
+                    else:
+                        signature = doc
+                    
+                    # Check if we've seen this content before
+                    if signature not in seen_content:
+                        seen_content.add(signature)
+                        unique_results.append(result)
+                
+                logger.info(f"Removed {len(reranked_results) - len(unique_results)} duplicate documents")
+                return unique_results
+            
+            return reranked_results
+            
+        except Exception as e:
+            logger.error(f"Error reranking results: {str(e)}")
+            logger.exception("Reranking failed")
+            return results  # Return original results on error
 
 # Create a global instance for easy importing
 model_engine = ModelEngine()

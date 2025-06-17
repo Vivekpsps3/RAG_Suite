@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-RobustRAG: Main entry point for the RobustRAG system.
-
-Automatically processes CSVs from documents/csv folder and provides query functionality.
-"""
 import os
 import sys
 import logging
@@ -38,6 +32,16 @@ def interactive_query_mode(engine: ApplicationEngine) -> None:
             print("\n=== Answer ===")
             print(answer)
             print("=============")
+            
+            # Get reranking statistics
+            stats = engine.get_last_query_stats()
+            if stats:
+                print("\n=== Context Information ===")
+                print(f"Initial results retrieved: {stats['initial_results_count']}")
+                print(f"Additional results retrieved: {stats['additional_results_count']}")
+                print(f"Results after reranking and deduplication: {stats['reranked_results_count']}")
+                print(f"Top results used for context: {stats['top_results_count']}")
+                print("=============================")
         except Exception as e:
             logger.error(f"Error executing query: {str(e)}")
             print(f"\nError: {str(e)}")
@@ -71,6 +75,7 @@ def main() -> None:
         parser.add_argument("--new", action="store_true", help="Create a new collection (clears existing data)")
         parser.add_argument("--reload", action="store_true", help="Force reload all CSV files into vector store")
         parser.add_argument("--check", action="store_true", help="Check vector store status")
+        parser.add_argument("--no-reranking", action="store_true", help="Disable the reranking step")
         args = parser.parse_args()
         
         # Initialize the application engine (will auto-process CSVs)
