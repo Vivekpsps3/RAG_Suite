@@ -73,7 +73,6 @@ def main() -> None:
         parser = argparse.ArgumentParser(description="RobustRAG system")
         parser.add_argument("--new", action="store_true", help="Create a new collection (clears existing data)")
         parser.add_argument("--check", action="store_true", help="Check vector store status")
-        parser.add_argument("--no-reranking", action="store_true", help="Disable the reranking step")
         args = parser.parse_args()
         
         # Initialize the application engine (will auto-process CSVs)

@@ -212,7 +212,7 @@ class ApplicationEngine:
     
     def get_last_query_stats(self) -> Dict[str, Any]:
         """
-        Get statistics about the last executed query, including reranking details.
+        Get statistics about the last executed query.
         
         Returns:
             Dictionary with statistics about the last query

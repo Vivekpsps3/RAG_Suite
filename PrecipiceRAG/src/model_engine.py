@@ -38,7 +38,6 @@ class ModelEngine:
             self._llm = None
             self._tokenizer = None
             self._embedding_model = None
-            self._reranker_model = None
             
             # Flag as initialized
             self._initialized = True
