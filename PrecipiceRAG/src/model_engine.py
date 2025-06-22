@@ -10,7 +10,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from sentence_transformers import SentenceTransformer, CrossEncoder
 import numpy as np
 
-from . import LLM_MODEL_PATH, EMBEDDING_MODEL_PATH, RERANKER_MODEL_PATH, MAX_NEW_TOKENS, LLM_TEMPERATURE
+from . import LLM_MODEL_PATH, EMBEDDING_MODEL_PATH, MAX_NEW_TOKENS, LLM_TEMPERATURE
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -98,30 +98,6 @@ class ModelEngine:
                 raise
                 
         return self._embedding_model
-        
-    def get_reranker_model(self, model_path: str = None) -> CrossEncoder:
-        """Get the cross-encoder reranker model, loading if necessary."""
-        if self._reranker_model is None:
-            try:
-                # Use config value if not provided
-                if model_path is None:
-                    model_path = RERANKER_MODEL_PATH
-                
-                # Initialize reranker model
-                logger.info(f"Loading reranker model from {model_path}")
-
-                # Load the model
-                self._reranker_model = CrossEncoder(model_path)
-                # Move to GPU if available
-                if torch.cuda.is_available():
-                    self._reranker_model.to(torch.device('cuda'))
-
-                logger.info("Reranker model loaded successfully")
-            except Exception as e:
-                logger.error(f"Error loading reranker model: {str(e)}")
-                raise
-                
-        return self._reranker_model
 
     def generate_embeddings(self, texts: Union[str, List[str]]) -> Union[List[float], List[List[float]]]:
         """

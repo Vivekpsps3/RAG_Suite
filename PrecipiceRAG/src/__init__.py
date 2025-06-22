@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 # Load environment variables from .env file
 load_dotenv()
 
-# Default batch size/chunk size (4096 as requested)
-DEFAULT_CHUNK_SIZE = 4096
-DEFAULT_CHUNK_OVERLAP = 200
+# Default chunk size/overlap for document processing
+DEFAULT_CHUNK_SIZE = 512
+DEFAULT_CHUNK_OVERLAP = 100
 
 # LLM Parameters
 LLM_MAX_TOKENS = 32000
@@ -33,9 +33,6 @@ VECTOR_STORE_DIR = os.getenv("VECTOR_STORE_DIR", "vectors")
 
 # Embedding model configuration
 EMBEDDING_MODEL_PATH = os.getenv("EMBEDDING_MODEL_PATH", "/home/vivek/Files/Model_Files/all-MiniLM-L6-v2")
-
-# Reranker model configuration
-RERANKER_MODEL_PATH = os.getenv("RERANKER_MODEL_PATH", "/home/vivek/Files/Model_Files/ms-marco-MiniLM-L-6-v2")
 
 # LLM model configuration
 LLM_MODEL_PATH = os.getenv("LLM_MODEL_PATH", "/home/vivek/Files/Model_Files/Dolphin3.0-Llama3.1-8B")

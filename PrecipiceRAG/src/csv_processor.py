@@ -47,7 +47,6 @@ class CSVProcessor:
 
 
     def process_csv(self, file_path: Path) -> List[Dict[str, Any]]:
-
         #First convert the CSV to JSON
         self.convert_to_json(csv_path=file_path, json_path=JSON_DOCUMENTS_DIR)
         
@@ -107,13 +106,17 @@ class CSVProcessor:
                 text = self.textifier_delimiter.join(
                     [json.dumps(content, ensure_ascii=False) for content in contents]
                 )
-                metadata = {"source_type": "csv", "source_id": doc_id}
-                documents.append({
-                    "id": doc_id,
-                    "text": text,
-                    "embedding": model_engine.generate_embeddings(text),
-                    "metadata": metadata
-                })
+                metadata = {"Opportunity ID": doc_id}
+
+                # Split text into chunks with a max length of 500 and a buffer of 100 tokens
+                chunks = self.text_splitter.split_text(text)
+                for chunk in chunks:
+                    documents.append({
+                        "id": f"{doc_id}_{uuid.uuid4()}",
+                        "text": chunk,
+                        "embedding": model_engine.generate_embeddings(chunk),
+                        "metadata": metadata
+                    })
         return documents
     
 

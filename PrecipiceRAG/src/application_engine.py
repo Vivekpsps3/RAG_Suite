@@ -189,7 +189,8 @@ class ApplicationEngine:
             logger.info(f"Selected top {len(top_results)} results after deduplication")
             
             # Format final context from results
-            context_str = "\n\n".join(["Opportunity id:" + str(r["id"]) + "\n" + str(r["document"]) for r in top_results])
+            seperator = "\n\n" + "-" * 80 + "\n\n"
+            context_str = seperator.join(["Opportunity id:" + str(r["metadata"].get("Opportunity ID", "")) + "\n" + str(r["document"]) for r in top_results])
             logger.info(f"Retrieved context for query: {user_query}")
             
             # Create final prompt
